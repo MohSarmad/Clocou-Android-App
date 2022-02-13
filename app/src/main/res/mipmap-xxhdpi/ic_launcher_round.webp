@@ -1,0 +1,168 @@
+/*
+ * Copyright (C) 2016 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package androidx.constraintlayout.widget;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.res.Resources;
+import android.content.res.TypedArray;
+import android.content.res.XmlResourceParser;
+import android.graphics.Color;
+import android.os.Build;
+import android.os.Build.VERSION_CODES;
+import android.util.AttributeSet;
+import android.util.Log;
+import android.util.SparseArray;
+import android.util.SparseIntArray;
+import android.util.TypedValue;
+import android.util.Xml;
+import android.view.LayoutInflater;
+import android.view.View;
+
+import androidx.constraintlayout.core.widgets.ConstraintWidget;
+import androidx.constraintlayout.core.widgets.HelperWidget;
+import androidx.constraintlayout.core.motion.utils.Easing;
+import androidx.constraintlayout.motion.widget.Debug;
+import androidx.constraintlayout.motion.widget.MotionLayout;
+import androidx.constraintlayout.motion.widget.MotionScene;
+import androidx.constraintlayout.widget.ConstraintAttribute.AttributeType;
+import androidx.constraintlayout.widget.ConstraintLayout.LayoutParams;
+
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+
+import java.io.IOException;
+import java.io.Writer;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * This class allows you to define programmatically a set of constraints to be used with {@link ConstraintLayout}.
+ * <p>
+ * For details about Constraint behaviour see {@link ConstraintLayout}.
+ * It lets you create and save constraints, and apply them to an existing ConstraintLayout. ConstraintsSet can be created in various ways:
+ * <ul>
+ * <li>
+ * Manually <br> {@code c = new ConstraintSet(); c.connect(....);}
+ * </li>
+ * <li>
+ * from a R.layout.* object <br> {@code c.clone(context, R.layout.layout1);}
+ * </li>
+ * <li>
+ * from a ConstraintLayout <br> {@code c.clone(constraintLayout);}
+ * </li>
+ * </ul><p>
+ * Example code:<br>
+ * {@sample resources/examples/ExampleConstraintSet.java Example}
+ */
+public class ConstraintSet {
+    private static final String TAG = "ConstraintSet";
+    private static final String ERROR_MESSAGE = "XML parser error must be within a Constraint ";
+
+    private static final int INTERNAL_MATCH_PARENT = -1;
+    private static final int INTERNAL_WRAP_CONTENT = -2;
+    private static final int INTERNAL_MATCH_CONSTRAINT = -3;
+    private static final int INTERNAL_WRAP_CONTENT_CONSTRAINED = -4;
+
+    private boolean mValidate;
+    public String mIdString;
+    public String derivedState = "";
+    public static final int ROTATE_NONE = 0;
+    public static final int ROTATE_PORTRATE_OF_RIGHT = 1;
+    public static final int ROTATE_PORTRATE_OF_LEFT = 2;
+    public static final int ROTATE_RIGHT_OF_PORTRATE = 3;
+    public static final int ROTATE_LEFT_OF_PORTRATE = 4;
+    public int mRotate = 0;
+    private HashMap<String, ConstraintAttribute> mSavedAttributes = new HashMap<>();
+
+    /**
+     * require that all views have IDs to function
+     */
+    private boolean mForceId = true;
+    /**
+     * Used to indicate a parameter is cleared or not set
+     */
+    public static final int UNSET = LayoutParams.UNSET;
+
+    /**
+     * Dimension will be controlled by constraints
+     */
+    public static final int MATCH_CONSTRAINT = ConstraintLayout.LayoutParams.MATCH_CONSTRAINT;
+
+    /**
+     * Dimension will set by the view's content
+     */
+    public static final int WRAP_CONTENT = ConstraintLayout.LayoutParams.WRAP_CONTENT;
+
+    /**
+     * How to calculate the size of a view in 0 dp by using its wrap_content size
+     */
+    public static final int MATCH_CONSTRAINT_WRAP = ConstraintLayout.LayoutParams.MATCH_CONSTRAINT_WRAP;
+
+    /**
+     * Calculate the size of a view in 0 dp by reducing the constrains gaps as much as possible
+     */
+    public static final int MATCH_CONSTRAINT_SPREAD = ConstraintLayout.LayoutParams.MATCH_CONSTRAINT_SPREAD;
+
+    public static final int MATCH_CONSTRAINT_PERCENT = ConstraintLayout.LayoutParams.MATCH_CONSTRAINT_PERCENT;
+
+    /**
+     * References the id of the parent.
+     * Used in:
+     * <ul>
+     * <li>{@link #connect(int, int, int, int, int)}</li>
+     * <li>{@link #center(int, int, int, int, int, int, int, float)}</li>
+     * </ul>
+     */
+    public static final int PARENT_ID = ConstraintLayout.LayoutParams.PARENT_ID;
+
+    /**
+     * The horizontal orientation.
+     */
+    public static final int HORIZONTAL = ConstraintLayout.LayoutParams.HORIZONTAL;
+
+    /**
+     * The vertical orientation.
+     */
+    public static final int VERTICAL = ConstraintLayout.LayoutParams.VERTICAL;
+
+    /**
+     * Used to create a horizontal create guidelines.
+     */
+    public static final int HORIZONTAL_GUIDELINE = 0;
+
+    /**
+     * Used to create a vertical create guidelines.
+     * see {@link #create(int, int)}
+     */
+    public static final int VERTICAL_GUIDELINE = 1;
+
+    /**
+     * This view is visible.
+     * Use with {@link #setVisibility} and <a href="#attr_android:visibility">{@code
+     * android:visibility}.
+     */
+    public static final int VISIBLE = View.VISIBLE;
+
+    /**
+     * This view is invisible, but it still takes up space for l
